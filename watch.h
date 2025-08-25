@@ -7,12 +7,12 @@
 #include <RtcDS1302.h>
 
 // ===== WiFi настройки =====
-const char* ssid     = "Chaostrophy 5G_ext";
-const char* password = "Gfif3004";
+const char* ssid     = "wifi ssid";
+const char* password = "wifi password";
 
 // ===== OpenWeather =====
 const String city = "Krasnodar";
-const String apiKey = "52cf4f3e7a1ef8f46dbf5e67baf3afec";
+const String apiKey = "OpenWeather apiKey";
 const String units = "metric";
 const String lang  = "en";
 
