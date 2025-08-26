@@ -7,14 +7,12 @@
 #include <RtcDS1302.h>
 
 // ===== WiFi настройки =====
-const char* ssid     = "wifi ssid";
-const char* password = "wifi password";
+const char* ssid     = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
 
-// ===== OpenWeather =====
-const String city = "Krasnodar";
-const String apiKey = "OpenWeather apiKey";
-const String units = "metric";
-const String lang  = "en";
+// ===== WeatherAPI =====
+const String city = "YOUR_CITY";  
+const String apiKey = "YOUR_API_KEY"; 
 
 // ===== Настройки NTP =====
 const char* ntpServer = "pool.ntp.org";
@@ -28,10 +26,11 @@ Disp1637Colon weatherDisp(D6, D5, false); // CLK=D5, DIO=D6 (погода)
 // Бегущая строка для дисплея погоды
 SegRunner weatherRunner(&weatherDisp);
 
-// Глобальная переменная для текста погоды
+// Глобальные переменные
 String weatherString = "WAIT";
-unsigned long lastClockUpdate = 0;
 unsigned long lastWeatherUpdate = 0;
+unsigned long lastRtcSync = 0;   // для повторной синхронизации RTC
+
 // ===== DS1302 =====
 ThreeWire myWire(D7, D0, D8); // IO=D7, SCLK=D0, CE=D8 (DAT, CLK, RST)
 RtcDS1302<ThreeWire> Rtc(myWire);
@@ -41,17 +40,9 @@ void logRtcTime() {
   RtcDateTime now = Rtc.GetDateTime();
   
   Serial.print("RTC Time: ");
-  Serial.print(now.Year());
-  Serial.print("-");
-  Serial.print(now.Month());
-  Serial.print("-");
-  Serial.print(now.Day());
-  Serial.print(" ");
-  Serial.print(now.Hour());
-  Serial.print(":");
-  Serial.print(now.Minute());
-  Serial.print(":");
-  Serial.print(now.Second());
+  Serial.printf("%04u-%02u-%02u %02u:%02u:%02u",
+    now.Year(), now.Month(), now.Day(),
+    now.Hour(), now.Minute(), now.Second());
   
   if (!now.IsValid()) {
     Serial.print(" - INVALID TIME");
@@ -60,7 +51,31 @@ void logRtcTime() {
   Serial.println();
 }
 
-// ===== Функция получения погоды =====
+// ===== Синхронизация RTC с NTP =====
+void syncRtcWithNtp() {
+  if (WiFi.status() == WL_CONNECTED) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 5000)) {
+      RtcDateTime t = RtcDateTime(
+        timeinfo.tm_year + 1900,
+        timeinfo.tm_mon + 1,
+        timeinfo.tm_mday,
+        timeinfo.tm_hour,
+        timeinfo.tm_min,
+        timeinfo.tm_sec
+      );
+      Rtc.SetDateTime(t);
+      Serial.println("RTC synced with NTP");
+      logRtcTime();
+    } else {
+      Serial.println("Failed to get NTP time");
+    }
+  } else {
+    Serial.println("WiFi not connected, RTC not synced");
+  }
+}
+
+// ===== Функция получения погоды (WeatherAPI) =====
 void updateWeather() {
   if (WiFi.status() != WL_CONNECTED) {
     weatherString = "NO WiFi";
@@ -72,20 +87,20 @@ void updateWeather() {
   WiFiClient client;
   HTTPClient http;
 
-  String url = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=" + apiKey + "&units=" + units + "&lang=" + lang;
+  String url = "http://api.weatherapi.com/v1/current.json?key=" + apiKey + "&q=" + city + "&aqi=no";
 
   http.begin(client, url);
   int httpCode = http.GET();
 
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
-    StaticJsonDocument<1024> doc;
+    StaticJsonDocument<2048> doc;
     DeserializationError error = deserializeJson(doc, payload);
 
     if (!error) {
-      float temp = doc["main"]["temp"];
-      String weather = doc["weather"][0]["main"].as<String>();
-      char buf[20];
+      float temp = doc["current"]["temp_c"];
+      String weather = doc["current"]["condition"]["text"].as<String>();
+      char buf[32];
       snprintf(buf, sizeof(buf), "%.0f* %s", temp, weather.c_str());
       weatherString = String(buf);
     } else {
@@ -115,10 +130,9 @@ void updateClockDisplay() {
 
     clockDisp.setCursor(0);
     clockDisp.print(buf);
-    clockDisp.colon(now.Second() % 2 == 0);  // точки
-    clockDisp.update();  // ОБЯЗАТЕЛЬНО
+    clockDisp.colon(now.Second() % 2 == 0);
+    clockDisp.update();
 }
-
 
 // ===== Настройки =====
 void setup() {
@@ -129,11 +143,11 @@ void setup() {
   clockDisp.brightness(7);
   weatherDisp.brightness(7);
 
-  // Короткий тест дисплея
-  clockDisp.print("8888");
+  // Тест дисплея
+  clockDisp.print("LOH");
   clockDisp.colon(true);
   delay(500);
-  clockDisp.clear(); // Очищаем дисплей
+  clockDisp.clear();
   delay(500);
 
   Rtc.Begin();
@@ -142,7 +156,6 @@ void setup() {
   // Подключаемся к WiFi
   WiFi.begin(ssid, password);
   
-  // Показываем процесс подключения
   unsigned long startTime = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startTime < 10000) {
     delay(250);
@@ -154,30 +167,10 @@ void setup() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("WiFi connected");
-    
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    
-    // Получаем время NTP
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 5000)) {
-      // Синхронизируем RTC
-      RtcDateTime t = RtcDateTime(
-        timeinfo.tm_year + 1900,
-        timeinfo.tm_mon + 1,
-        timeinfo.tm_mday,
-        timeinfo.tm_hour,
-        timeinfo.tm_min,
-        timeinfo.tm_sec
-      );
-      Rtc.SetDateTime(t);
-      Serial.println("RTC synced with NTP");
-      
-      // Сразу обновляем дисплей после синхронизации
-      updateClockDisplay();
-    }
+    syncRtcWithNtp();  // сразу при старте
   } else {
     Serial.println("WiFi connection failed");
-    // Используем время из RTC если WiFi не подключился
     updateClockDisplay();
   }
 
@@ -185,9 +178,7 @@ void setup() {
   weatherRunner.setText(weatherString);
   weatherRunner.start();
 
-  // Первая загрузка погоды
-  updateWeather();
-
+  updateWeather(); // первая загрузка
   Serial.println("Setup complete");
 }
 
@@ -196,9 +187,16 @@ void loop() {
     updateClockDisplay();
     weatherRunner.tick();
 
+    // Обновляем погоду каждые 10 минут
     if (millis() - lastWeatherUpdate > 600000) {
         updateWeather();
         lastWeatherUpdate = millis();
+    }
+
+    // Синхронизируем RTC с NTP каждые 10 минут
+    if (millis() - lastRtcSync > 600000) {
+        syncRtcWithNtp();
+        lastRtcSync = millis();
     }
 
     delay(10);
