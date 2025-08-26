@@ -1,41 +1,40 @@
-# Wemos D1 Mini Clock + Weather Display
+# ESP8266 Clock & Weather Display
 
-Прошивка для Wemos D1 Mini с двумя 4x7 сегментными дисплеями и RTC DS1302. Показывает время и погоду.
+Отображает текущее время и температуру/погодные условия на двух 7-сегментных дисплеях: часы и бегущая строка с погодой. Используется модуль RTC DS1302 для хранения времени и синхронизация с NTP через WiFi.
 
-## Что делает код
-- Часы отображают текущее время с RTC DS1302.
-- RTC синхронизируется с NTP при подключении к WiFi.
-- Второй дисплей показывает температуру и погодное состояние (например, `22* Clear`).
-- Погода обновляется каждые 10 минут через OpenWeather API.
-- Логи времени RTC выводятся в Serial Monitor.
+## Подключение
+- **Дисплей часов:** CLK → D1, DIO → D2
+- **Дисплей погоды:** CLK → D5, DIO → D6
+- **RTC DS1302:** DAT (IO) → D7, CLK (SCLK) → D0, RST (CE) → D8
 
-## Пины подключения
+## Настройки кода
+**WiFi:**
+```cpp
+const char* ssid     = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+```
+**WeatherAPI:**
+API ключ получить на https://www.weatherapi.com
+```cpp
+const String city = "YOUR_CITY";
+const String apiKey = "YOUR_API_KEY";
+```
+**Часовой пояс (GMT)::**
+```cpp
+const long  gmtOffset_sec = 3 * 3600;  // GMT+3
+const int   daylightOffset_sec = 0;
+```
+## Настройки кода
+- Подключить к питанию ESP8266.
+- Дисплей часов покажет время из RTC.
+- Дисплей погоды покажет температуру и погодные условия из WeatherAPI.
+- RTC синхронизируется с NTP каждые 10 минут.
+- Погода обновляется каждые 10 минут.
 
-### Дисплей часов (TM1637)
-- CLK → D1
-- DIO → D2
-
-### Дисплей погоды (TM1637)
-- CLK → D5
-- DIO → D6
-
-### RTC DS1302
-- DAT → D7
-- CLK → D0
-- RST → D8
-
-## Настройки WiFi
-- SSID: `Wi-Fi NAME`
-- PASSWORD: `Wi-Fi PASS`
-
-## Настройки погоды
-- Город: `Krasnodar` (можно поменять)
-- API Key: получить на [https://openweathermap.org](https://openweathermap.org)
-- Единицы измерения: `metric`
-- Язык: `en`
-
-## Использование
-1. Подключить все компоненты по указанным пинам.
-2. Получить OpenWeather API ключ и вставить в код.
-3. Залить прошивку на Wemos D1 Mini.
-4. Открыть Serial Monitor для логов RTC и WiFi.
+## Библиотеки
+- ESP8266WiFi
+- ESP8266HTTPClient
+- ArduinoJson
+- GyverSegment
+- ThreeWire
+- RtcDS1302
